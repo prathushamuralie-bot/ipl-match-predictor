@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>IPL Predictor — Floodlight</title>
+<style>
+  :root{
+    --bg:#0A0F1E;
+    --bg2:#0F1830;
+    --panel:#10182C;
+    --line:#23304D;
+    --amber:#FFB627;
+    --teal:#0FD3C0;
+    --maroon:#C8385A;
+    --ink:#E9EDF7;
+    --inkdim:#8C97B8;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:
+      radial-gradient(circle at 20% -10%, #1A2747 0%, transparent 45%),
+      radial-gradient(circle at 90% 10%, #1A2747 0%, transparent 40%),
+      var(--bg);
+    color:var(--ink);
+    font-family:'JetBrains Mono', 'Courier New', monospace;
+    padding:28px 18px 60px;
+  }
+  h1,h2,h3{font-family:'Oswald','Arial Narrow',sans-serif; letter-spacing:0.5px; margin:0;}
+  .topline{
+    display:flex; align-items:baseline; gap:14px; max-width:1180px; margin:0 auto 6px;
+    border-bottom:2px solid var(--line); padding-bottom:14px;
+  }
+  .topline .scoreboard{
+    font-size:11px; color:var(--amber); letter-spacing:3px; text-transform:uppercase;
+  }
+  .topline h1{font-size:30px; color:var(--ink); text-transform:uppercase;}
+  .topline h1 span{color:var(--teal);}
+  .sub{max-width:1180px;margin:0 auto 26px;color:var(--inkdim);font-size:12.5px;}
+
+  .wrap{max-width:1180px;margin:0 auto; display:grid; grid-template-columns: 1.15fr 1fr; gap:18px;}
+  @media (max-width:900px){.wrap{grid-template-columns:1fr;}}
+
+  .panel{
+    background:linear-gradient(180deg,var(--panel),#0C1326);
+    border:1px solid var(--line); border-radius:10px; padding:18px 20px;
+  }
+  .panel h2{font-size:14px;color:var(--inkdim);text-transform:uppercase;letter-spacing:2px;margin-bottom:14px;}
+  .panel h2 b{color:var(--amber);}
+
+  /* matchup picker */
+  .matchup{display:flex;align-items:center;gap:14px;}
+  select{
+    flex:1; background:#0B1326;border:1px solid var(--line);color:var(--ink);
+    padding:10px 12px;border-radius:7px;font-family:inherit;font-size:13px;
+  }
+  .vs{color:var(--maroon);font-family:'Oswald',sans-serif;font-weight:700;font-size:13px;}
+  .opts{display:flex;gap:18px;margin-top:12px;font-size:12px;color:var(--inkdim);flex-wrap:wrap;}
+  .opts label{display:flex;align-items:center;gap:6px;cursor:pointer;}
+  select#venue{margin-top:10px;width:100%;}
+
+  /* probability bar */
+  .probrow{margin-top:20px;}
+  .probnames{display:flex;justify-content:space-between;font-size:12px;margin-bottom:6px;}
+  .probnames b{font-size:20px;font-family:'Oswald',sans-serif;}
+  .bar{height:34px;border-radius:6px;overflow:hidden;display:flex;border:1px solid var(--line);}
+  .bar div{display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#06101F;transition:width .5s ease;}
+  .seg-a{background:var(--teal);}
+  .seg-b{background:var(--amber);}
+
+  .factors{margin-top:16px;font-size:11.5px;color:var(--inkdim);line-height:1.7;}
+  .factors div{display:flex;justify-content:space-between;border-bottom:1px dashed var(--line);padding:4px 0;}
+  .factors span.fv{color:var(--ink);}
+
+  button.sim{
+    margin-top:18px;width:100%;background:var(--maroon);color:#fff;border:none;
+    padding:13px;border-radius:7px;font-family:'Oswald',sans-serif;letter-spacing:2px;
+    text-transform:uppercase;font-size:13px;cursor:pointer;transition:transform .12s, background .2s;
+  }
+  button.sim:hover{background:#E04268;transform:translateY(-1px);}
+  button.sim:active{transform:translateY(0);}
+
+  #resultLine{margin-top:12px;font-size:12.5px;color:var(--teal);min-height:18px;}
+
+  /* table */
+  table{width:100%;border-collapse:collapse;font-size:11.5px;}
+  th{
+    text-align:left;color:var(--inkdim);text-transform:uppercase;font-size:10px;
+    letter-spacing:1px;padding:6px 8px;border-bottom:1px solid var(--line);
+  }
+  td{padding:7px 8px;border-bottom:1px solid #18213A;}
+  tr:hover td{background:#101A33;}
+  .teamcell{display:flex;align-items:center;gap:8px;font-weight:600;}
+  .dot{width:9px;height:9px;border-radius:50%;flex:none;}
+  .form{display:flex;gap:3px;}
+  .pip{width:8px;height:8px;border-radius:50%;}
+  .pip.W{background:var(--teal);} .pip.L{background:var(--maroon);}
+
+  .feed{max-height:230px;overflow-y:auto;margin-top:6px;}
+  .feed::-webkit-scrollbar{width:6px;} .feed::-webkit-scrollbar-thumb{background:var(--line);border-radius:3px;}
+  .feeditem{font-size:11.5px;padding:7px 0;border-bottom:1px dashed var(--line);color:var(--inkdim);}
+  .feeditem b{color:var(--ink);}
+  .footer-note{max-width:1180px;margin:22px auto 0;color:#5C6886;font-size:10.5px;text-align:center;}
+</style>
+</head>
+<body>
+
+<div class="topline">
+  <div>
+    <div class="scoreboard">Season Tracker · Live Model</div>
+    <h1>IPL <span>PREDICTOR</span></h1>
+  </div>
+</div>
+<div class="sub">Pick two teams, get a win probability from current form &amp; head-to-head — then simulate the match and watch every number on this page update.</div>
+
+<div class="wrap">
+
+  <!-- LEFT: PREDICTOR -->
+  <div class="panel">
+    <h2><b>01</b> · MATCH PREDICTOR</h2>
+    <div class="matchup">
+      <select id="teamA"></select>
+      <div class="vs">VS</div>
+      <select id="teamB"></select>
+    </div>
+    <select id="venue"></select>
+    <div class="opts">
+      <label><input type="checkbox" id="tossWinsA"> Team A wins toss</label>
+      <label><input type="checkbox" id="tossWinsB"> Team B wins toss</label>
+    </div>
+
+    <div class="probrow">
+      <div class="probnames">
+        <span id="nameA">—</span>
+        <span id="nameB">—</span>
+      </div>
+      <div class="bar">
+        <div class="seg-a" id="segA" style="width:50%">50%</div>
+        <div class="seg-b" id="segB" style="width:50%">50%</div>
+      </div>
+    </div>
+
+    <div class="factors" id="factors"></div>
+
+    <button class="sim" id="simBtn">▶ SIMULATE THIS MATCH</button>
+    <div id="resultLine"></div>
+  </div>
+
+  <!-- RIGHT: STATS -->
+  <div class="panel">
+    <h2><b>02</b> · TEAM STANDINGS</h2>
+    <table>
+      <thead><tr><th>Team</th><th>P</th><th>W</th><th>L</th><th>NRR</th><th>Last 5</th><th>Win%</th></tr></thead>
+      <tbody id="standingsBody"></tbody>
+    </table>
+
+    <h2 style="margin-top:22px;"><b>03</b> · MATCH FEED</h2>
+    <div class="feed" id="feed"><div class="feeditem" style="color:var(--inkdim)">No matches simulated yet this session.</div></div>
+  </div>
+
+</div>
+
+<div class="footer-note">Stats seeded from indicative 2025-season form · all simulated outcomes are probabilistic, for entertainment/modeling purposes only.</div>
+
+<script>
+const COLORS = ['#FFB627','#0FD3C0','#C8385A','#6E7DFF','#3AC97F','#E0853B','#9A6BFF','#E0C03A','#4FB0E0','#E05A8C'];
+
+// ---- seed data: 10 IPL teams with indicative season-form numbers ----
+let teams = [
+  {name:'Chennai Super Kings', short:'CSK', wins:7, losses:6, nrr:0.18, home:'Chepauk, Chennai'},
+  {name:'Mumbai Indians',      short:'MI',  wins:8, losses:5, nrr:0.31, home:'Wankhede, Mumbai'},
+  {name:'Royal Challengers Bengaluru', short:'RCB', wins:9, losses:5, nrr:0.42, home:'Chinnaswamy, Bengaluru'},
+  {name:'Kolkata Knight Riders', short:'KKR', wins:8, losses:6, nrr:0.22, home:'Eden Gardens, Kolkata'},
+  {name:'Delhi Capitals',      short:'DC',  wins:6, losses:8, nrr:-0.21, home:'Arun Jaitley, Delhi'},
+  {name:'Punjab Kings',        short:'PBKS',wins:8, losses:6, nrr:0.15, home:'Mullanpur, Punjab'},
+  {name:'Rajasthan Royals',    short:'RR',  wins:5, losses:9, nrr:-0.34, home:'Sawai Mansingh, Jaipur'},
+  {name:'Sunrisers Hyderabad', short:'SRH', wins:7, losses:7, nrr:0.05, home:'Uppal, Hyderabad'},
+  {name:'Gujarat Titans',      short:'GT',  wins:9, losses:5, nrr:0.38, home:'Narendra Modi Stadium, Ahmedabad'},
+  {name:'Lucknow Super Giants',short:'LSG', wins:6, losses:7, nrr:-0.09, home:'Ekana, Lucknow'},
+];
+teams.forEach((t,i)=>{
+  t.color = COLORS[i];
+  // build a plausible last-5 form string biased by win rate
+  const wr = t.wins/(t.wins+t.losses);
+  t.form = Array.from({length:5},()=> Math.random() < wr ? 'W':'L');
+});
+
+// head-to-head store: key "A|B" -> {aWins, bWins}
+let h2h = {};
+function h2hKey(a,b){ return [a,b].sort().join('|'); }
+function getH2H(aShort,bShort){
+  const k = h2hKey(aShort,bShort);
+  if(!h2h[k]) h2h[k] = {[aShort]:0,[bShort]:0};
+  return h2h[k];
+}
+
+let matchLog = [];
+
+// ---- populate selects ----
+const selA = document.getElementById('teamA');
+const selB = document.getElementById('teamB');
+const venueSel = document.getElementById('venue');
+function fillTeamSelects(){
+  [selA, selB].forEach(sel=>{
+    sel.innerHTML = teams.map(t=>`<option value="${t.short}">${t.name} (${t.short})</option>`).join('');
+  });
+  selA.value = teams[1].short; // MI
+  selB.value = teams[2].short; // RCB
+}
+function fillVenueSelect(){
+  venueSel.innerHTML = teams.map(t=>`<option value="${t.short}">Venue: ${t.home}</option>`).join('');
+}
+fillTeamSelects();
+fillVenueSelect();
+
+// ---- core probability model ----
+function teamByShort(s){ return teams.find(t=>t.short===s); }
+
+function computeProbability(aShort, bShort, venueShort, tossA, tossB){
+  const A = teamByShort(aShort), B = teamByShort(bShort);
+
+  const wrA = A.wins/(A.wins+A.losses);
+  const wrB = B.wins/(B.wins+B.losses);
+
+  const formA = A.form.filter(x=>x==='W').length/5;
+  const formB = B.form.filter(x=>x==='W').length/5;
+
+  const h = getH2H(aShort,bShort);
+  const h2hTotal = h[aShort]+h[bShort];
+  const h2hA = h2hTotal ? h[aShort]/h2hTotal : 0.5;
+  const h2hB = h2hTotal ? h[bShort]/h2hTotal : 0.5;
+
+  const nrrA = A.nrr, nrrB = B.nrr;
+
+  const homeA = venueShort === aShort ? 0.06 : 0;
+  const homeB = venueShort === bShort ? 0.06 : 0;
+
+  const tossBoostA = tossA ? 0.03 : 0;
+  const tossBoostB = tossB ? 0.03 : 0;
+
+  // weighted score
+  let scoreA = wrA*0.32 + formA*0.28 + h2hA*0.18 + (nrrA/2+0.5)*0.12*0 + homeA + tossBoostA;
+  let scoreB = wrB*0.32 + formB*0.28 + h2hB*0.18 + (nrrB/2+0.5)*0.12*0 + homeB + tossBoostB;
+  // add small nrr nudge (clamped)
+  scoreA += Math.max(-0.05, Math.min(0.05, nrrA*0.07));
+  scoreB += Math.max(-0.05, Math.min(0.05, nrrB*0.07));
+
+  let pA = scoreA/(scoreA+scoreB);
+  pA = Math.max(0.08, Math.min(0.92, pA)); // keep believable bounds
+  return {
+    pA, pB: 1-pA,
+    breakdown:{wrA,wrB,formA,formB,h2hA,h2hB,homeA,homeB,tossBoostA,tossBoostB,nrrA,nrrB}
+  };
+}
+
+function pct(x){ return Math.round(x*100); }
+
+function renderFactors(b, A, B){
+  const f = document.getElementById('factors');
+  const rows = [
+    ['Season win%', `${A.short} ${pct(b.wrA)}%  vs  ${B.short} ${pct(b.wrB)}%`],
+    ['Last-5 form', `${A.short} ${pct(b.formA)}%  vs  ${B.short} ${pct(b.formB)}%`],
+    ['Head-to-head', `${A.short} ${pct(b.h2hA)}%  vs  ${B.short} ${pct(b.h2hB)}%`],
+    ['Net run rate', `${A.short} ${b.nrrA.toFixed(2)}  vs  ${B.short} ${b.nrrB.toFixed(2)}`],
+    ['Home advantage', (b.homeA?`+6% ${A.short}`:b.homeB?`+6% ${B.short}`:'neutral venue')],
+    ['Toss bonus', (b.tossBoostA?`+3% ${A.short}`: b.tossBoostB?`+3% ${B.short}`:'no toss selected')],
+  ];
+  f.innerHTML = rows.map(r=>`<div><span>${r[0]}</span><span class="fv">${r[1]}</span></div>`).join('');
+}
+
+function updateProbabilityPanel(){
+  const aShort = selA.value, bShort = selB.value;
+  if(aShort === bShort){ document.getElementById('resultLine').textContent = 'Pick two different teams.'; return; }
+  const A = teamByShort(aShort), B = teamByShort(bShort);
+  const venueShort = venueSel.value;
+  const tossA = document.getElementById('tossWinsA').checked;
+  const tossB = document.getElementById('tossWinsB').checked;
+
+  const {pA, pB, breakdown} = computeProbability(aShort,bShort,venueShort,tossA,tossB);
+
+  document.getElementById('nameA').textContent = `${A.short} — ${pct(pA)}%`;
+  document.getElementById('nameB').textContent = `${B.short} — ${pct(pB)}%`;
+  document.getElementById('segA').style.width = pct(pA)+'%';
+  document.getElementById('segB').style.width = pct(pB)+'%';
+  document.getElementById('segA').textContent = pct(pA)+'%';
+  document.getElementById('segB').textContent = pct(pB)+'%';
+  document.getElementById('segA').style.background = A.color;
+  document.getElementById('segB').style.background = B.color;
+
+  renderFactors(breakdown, A, B);
+}
+
+function renderStandings(){
+  const body = document.getElementById('standingsBody');
+  const sorted = [...teams].sort((x,y)=> (y.wins/(y.wins+y.losses)) - (x.wins/(x.wins+x.losses)));
+  body.innerHTML = sorted.map(t=>{
+    const played = t.wins+t.losses;
+    const wr = played ? Math.round(100*t.wins/played) : 0;
+    const formPips = t.form.map(f=>`<span class="pip ${f}"></span>`).join('');
+    return `<tr>
+      <td><div class="teamcell"><span class="dot" style="background:${t.color}"></span>${t.short}</div></td>
+      <td>${played}</td>
+      <td>${t.wins}</td>
+      <td>${t.losses}</td>
+      <td>${t.nrr>0?'+':''}${t.nrr.toFixed(2)}</td>
+      <td><div class="form">${formPips}</div></td>
+      <td>${wr}%</td>
+    </tr>`;
+  }).join('');
+}
+
+function pushFeed(msg){
+  const feed = document.getElementById('feed');
+  if(feed.children.length===1 && feed.children[0].textContent.includes('No matches')) feed.innerHTML='';
+  const div = document.createElement('div');
+  div.className='feeditem';
+  div.innerHTML = msg;
+  feed.prepend(div);
+}
+
+// ---- simulate a match: resolves a winner based on current probability,
+// then updates wins/losses, NRR drift, last-5 form, and head-to-head ----
+function simulateMatch(){
+  const aShort = selA.value, bShort = selB.value;
+  if(aShort === bShort){ document.getElementById('resultLine').textContent = 'Pick two different teams to simulate.'; return; }
+  const A = teamByShort(aShort), B = teamByShort(bShort);
+  const venueShort = venueSel.value;
+  const tossA = document.getElementById('tossWinsA').checked;
+  const tossB = document.getElementById('tossWinsB').checked;
+
+  const {pA} = computeProbability(aShort,bShort,venueShort,tossA,tossB);
+  const aWins = Math.random() < pA;
+  const winner = aWins ? A : B;
+  const loser  = aWins ? B : A;
+
+  winner.wins++;
+  loser.losses++;
+  winner.form.push('W'); winner.form.shift();
+  loser.form.push('L'); loser.form.shift();
+
+  const swing = 0.04 + Math.random()*0.05;
+  winner.nrr = +(winner.nrr + swing).toFixed(2);
+  loser.nrr  = +(loser.nrr - swing*0.7).toFixed(2);
+
+  const h = getH2H(aShort,bShort);
+  h[winner.short] = (h[winner.short]||0)+1;
+
+  matchLog.push({a:aShort,b:bShort,winner:winner.short, venue:venueShort, time:new Date()});
+
+  document.getElementById('resultLine').innerHTML =
+    `<b style="color:${winner.color}">${winner.short}</b> won the simulated match vs ${loser.short}. Stats updated below.`;
+  pushFeed(`<b>${winner.short}</b> beat ${loser.short} · venue ${teamByShort(venueShort).home} · margin model: ${swing.toFixed(2)} NRR swing`);
+
+  renderStandings();
+  updateProbabilityPanel(); // recompute live probability now that stats moved
+}
+
+// ---- wire up events ----
+[selA, selB, venueSel].forEach(el=>el.addEventListener('change', updateProbabilityPanel));
+document.getElementById('tossWinsA').addEventListener('change', (e)=>{
+  if(e.target.checked) document.getElementById('tossWinsB').checked=false;
+  updateProbabilityPanel();
+});
+document.getElementById('tossWinsB').addEventListener('change', (e)=>{
+  if(e.target.checked) document.getElementById('tossWinsA').checked=false;
+  updateProbabilityPanel();
+});
+document.getElementById('simBtn').addEventListener('click', simulateMatch);
+
+// ---- initial render ----
+renderStandings();
+updateProbabilityPanel();
+</script>
+</body>
+</html>
